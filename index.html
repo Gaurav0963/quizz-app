@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>General Knowledge Quiz</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Styles for the custom modal */
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        .modal-container {
+            transition: transform 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
+
+    <div id="quiz-container" class="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-2xl transition-all duration-500">
+        <h1 class="text-3xl font-bold text-center text-indigo-600 mb-2">General Knowledge Quiz</h1>
+        <p class="text-center text-gray-500 mb-6">Test your knowledge and submit your score!</p>
+
+        <!-- Student Details Form -->
+        <div id="student-details" class="mb-8 border-b pb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Student Information</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="studentName" class="block text-sm font-medium text-gray-600 mb-1">Full Name</label>
+                    <input type="text" id="studentName" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" placeholder="e.g., Jane Doe">
+                </div>
+                <div>
+                    <label for="rollNumber" class="block text-sm font-medium text-gray-600 mb-1">Roll Number</label>
+                    <input type="text" id="rollNumber" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition" placeholder="e.g., 101">
+                </div>
+            </div>
+        </div>
+
+        <!-- Quiz Form -->
+        <form id="quiz-form">
+            <div id="questions-wrapper" class="space-y-6">
+                <!-- Questions will be dynamically inserted here -->
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 transition-transform transform hover:scale-105 mt-8">
+                Submit Quiz
+            </button>
+        </form>
+
+        <!-- Results Display -->
+        <div id="result" class="hidden text-center mt-8 p-6 bg-indigo-50 rounded-lg">
+            <h2 class="text-2xl font-bold text-indigo-800">Quiz Completed!</h2>
+            <p class="text-lg mt-2">Your score is: <span id="score" class="font-bold text-2xl text-green-600"></span></p>
+            <p id="feedback" class="mt-4 text-gray-600"></p>
+        </div>
+    </div>
+
+    <!-- Custom Modal for Alerts -->
+    <div id="message-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-container bg-white w-full max-w-md p-6 rounded-xl shadow-lg text-center transform scale-95">
+            <p id="modal-message" class="text-lg text-gray-700 mb-6"></p>
+            <button id="modal-close-btn" class="bg-indigo-600 text-white font-bold py-2 px-8 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 transition">
+                OK
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // IMPORTANT: Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+
+        // --- Firebase Configuration ---
+        // This is your specific Firebase project configuration.
+        const firebaseConfig = {
+            apiKey: "AIzaSyCBoAa0IqIAAJHvP9RJkuIAZkpKrrR1kWM",
+            authDomain: "data-7a9f7.firebaseapp.com",
+            projectId: "data-7a9f7",
+            storageBucket: "data-7a9f7.appspot.com", // Corrected storage bucket domain
+            messagingSenderId: "68605053268",
+            appId: "1:68605053268:web:5c2572b71b109de9c420c1",
+            measurementId: "G-ERKN0FNZ3C"
+        };
+
+
+        // --- App & Firestore Initialization ---
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const analytics = getAnalytics(app);
+        
+        // Enable debug logging for Firestore
+        // setLogLevel('debug');
+
+        // --- Authentication ---
+        // Sign in the user anonymously. An authenticated user is required to write to Firestore.
+        async function authenticateUser() {
+            try {
+                await signInAnonymously(auth);
+                console.log("User authenticated successfully.");
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                showMessage("Error: Could not connect to the database. Please refresh and try again.");
+            }
+        }
+        
+        // --- Custom Modal Logic ---
+        const modal = document.getElementById('message-modal');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+
+        function showMessage(message) {
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+            // Animate in
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('.modal-container').classList.remove('scale-95');
+            }, 10);
+        }
+
+        function hideMessage() {
+            // Animate out
+            modal.classList.add('opacity-0');
+            modal.querySelector('.modal-container').classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+        
+        modalCloseBtn.addEventListener('click', hideMessage);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                hideMessage();
+            }
+        });
+
+
+        // --- Quiz Data ---
+        const quizData = [
+            {
+                question: "What is the capital of France?",
+                options: ["Berlin", "Madrid", "Paris", "Rome"],
+                answer: "Paris"
+            },
+            {
+                question: "Which planet is known as the Red Planet?",
+                options: ["Earth", "Mars", "Jupiter", "Venus"],
+                answer: "Mars"
+            },
+            {
+                question: "What is the largest mammal in the world?",
+                options: ["Elephant", "Blue Whale", "Great White Shark", "Giraffe"],
+                answer: "Blue Whale"
+            },
+            {
+                question: "Who wrote 'Romeo and Juliet'?",
+                options: ["Charles Dickens", "William Shakespeare", "Mark Twain", "Jane Austen"],
+                answer: "William Shakespeare"
+            },
+            {
+                question: "What is the chemical symbol for water?",
+                options: ["O2", "H2O", "CO2", "NaCl"],
+                answer: "H2O"
+            }
+        ];
+
+        // --- Render Quiz ---
+        const questionsWrapper = document.getElementById('questions-wrapper');
+        
+        function loadQuiz() {
+            let questionHTML = '';
+            quizData.forEach((q, index) => {
+                questionHTML += `
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <p class="font-semibold mb-3">${index + 1}. ${q.question}</p>
+                        <div class="space-y-2">
+                `;
+                q.options.forEach(option => {
+                    questionHTML += `
+                        <div>
+                            <label class="flex items-center space-x-3 cursor-pointer">
+                                <input type="radio" name="question${index}" value="${option}" class="form-radio h-5 w-5 text-indigo-600">
+                                <span>${option}</span>
+                            </label>
+                        </div>
+                    `;
+                });
+                questionHTML += `</div></div>`;
+            });
+            questionsWrapper.innerHTML = questionHTML;
+        }
+
+        // --- Handle Form Submission ---
+        const quizForm = document.getElementById('quiz-form');
+        quizForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // 1. Get Student Info
+            const studentName = document.getElementById('studentName').value.trim();
+            const rollNumber = document.getElementById('rollNumber').value.trim();
+
+            if (!studentName || !rollNumber) {
+                showMessage("Please fill in your name and roll number before submitting.");
+                return;
+            }
+
+            // 2. Calculate Score
+            let score = 0;
+            quizData.forEach((q, index) => {
+                const selectedOption = document.querySelector(`input[name="question${index}"]:checked`);
+                if (selectedOption && selectedOption.value === q.answer) {
+                    score++;
+                }
+            });
+            const totalMarks = quizData.length;
+            const percentage = (score / totalMarks) * 100;
+
+            // 3. Save to Firestore
+            try {
+                // The collection path is "quizResults". You will see this in your Firestore database.
+                const docRef = await addDoc(collection(db, "quizResults"), {
+                    name: studentName,
+                    rollNumber: rollNumber,
+                    marks: score,
+                    totalMarks: totalMarks,
+                    percentage: percentage,
+                    submittedAt: new Date()
+                });
+                console.log("Document written with ID: ", docRef.id);
+                
+                // 4. Display Result
+                document.getElementById('score').innerText = `${score} / ${totalMarks} (${percentage.toFixed(2)}%)`;
+                
+                let feedbackText = "Good effort! Keep practicing.";
+                if (percentage >= 80) {
+                    feedbackText = "Excellent work! You have a great score.";
+                } else if (percentage >= 60) {
+                    feedbackText = "Well done! A solid performance.";
+                }
+                document.getElementById('feedback').innerText = feedbackText;
+
+                document.getElementById('result').classList.remove('hidden');
+                quizForm.classList.add('hidden');
+                document.getElementById('student-details').classList.add('hidden');
+
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                showMessage("There was an error saving your score. Please check the console for details.");
+            }
+        });
+
+        // --- Initial Load ---
+        window.onload = () => {
+            authenticateUser();
+            loadQuiz();
+        };
+    </script>
+</body>
+</html>
