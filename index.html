@@ -26,7 +26,11 @@
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
 
     <div id="quiz-container" class="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-2xl transition-all duration-500">
-        <h1 class="text-3xl font-bold text-center text-indigo-600 mb-2">General Knowledge Quiz</h1>
+        <div class="flex justify-between items-center mb-2">
+             <h1 class="text-3xl font-bold text-indigo-600">General Knowledge Quiz</h1>
+             <!-- Timer Display -->
+             <div id="timer-display" class="text-2xl font-bold text-red-500 bg-red-100 px-4 py-2 rounded-lg">10:00</div>
+        </div>
         <p class="text-center text-gray-500 mb-6">Test your knowledge and submit your score!</p>
 
         <!-- Student Details Form -->
@@ -100,11 +104,12 @@
         const auth = getAuth(app);
         const analytics = getAnalytics(app);
         
-        // Enable debug logging for Firestore
-        // setLogLevel('debug');
+        // --- App State & Constants ---
+        let timerInterval;
+        const QUIZ_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
+        let quizSubmitted = false;
 
         // --- Authentication ---
-        // Sign in the user anonymously. An authenticated user is required to write to Firestore.
         async function authenticateUser() {
             try {
                 await signInAnonymously(auth);
@@ -123,7 +128,6 @@
         function showMessage(message) {
             modalMessage.textContent = message;
             modal.classList.remove('hidden');
-            // Animate in
             setTimeout(() => {
                 modal.classList.remove('opacity-0');
                 modal.querySelector('.modal-container').classList.remove('scale-95');
@@ -131,7 +135,6 @@
         }
 
         function hideMessage() {
-            // Animate out
             modal.classList.add('opacity-0');
             modal.querySelector('.modal-container').classList.add('scale-95');
             setTimeout(() => {
@@ -140,46 +143,51 @@
         }
         
         modalCloseBtn.addEventListener('click', hideMessage);
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                hideMessage();
+        modal.addEventListener('click', (e) => { if (e.target === modal) hideMessage(); });
+
+        // --- Timer Logic ---
+        function startOrResumeTimer() {
+            const timerDisplay = document.getElementById('timer-display');
+            let endTime = localStorage.getItem('quizEndTime');
+
+            if (!endTime) {
+                // If no end time is stored, start a new timer.
+                endTime = Date.now() + QUIZ_DURATION;
+                localStorage.setItem('quizEndTime', endTime);
             }
-        });
+
+            timerInterval = setInterval(() => {
+                const remainingTime = endTime - Date.now();
+
+                if (remainingTime <= 0) {
+                    clearInterval(timerInterval);
+                    timerDisplay.textContent = "Time's Up!";
+                    showMessage("Time is up! Your quiz will be submitted automatically.");
+                    submitQuiz(); // Auto-submit the quiz
+                    return;
+                }
+
+                const minutes = Math.floor((remainingTime % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((remainingTime % (1000 * 60)) / 1000);
+                
+                // Format time to always show two digits for seconds
+                timerDisplay.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            }, 1000);
+        }
 
 
         // --- Quiz Data ---
         const quizData = [
-            {
-                question: "What is the capital of France?",
-                options: ["Berlin", "Madrid", "Paris", "Rome"],
-                answer: "Paris"
-            },
-            {
-                question: "Which planet is known as the Red Planet?",
-                options: ["Earth", "Mars", "Jupiter", "Venus"],
-                answer: "Mars"
-            },
-            {
-                question: "What is the largest mammal in the world?",
-                options: ["Elephant", "Blue Whale", "Great White Shark", "Giraffe"],
-                answer: "Blue Whale"
-            },
-            {
-                question: "Who wrote 'Romeo and Juliet'?",
-                options: ["Charles Dickens", "William Shakespeare", "Mark Twain", "Jane Austen"],
-                answer: "William Shakespeare"
-            },
-            {
-                question: "What is the chemical symbol for water?",
-                options: ["O2", "H2O", "CO2", "NaCl"],
-                answer: "H2O"
-            }
+            { question: "What is the capital of France?", options: ["Berlin", "Madrid", "Paris", "Rome"], answer: "Paris" },
+            { question: "Which planet is known as the Red Planet?", options: ["Earth", "Mars", "Jupiter", "Venus"], answer: "Mars" },
+            { question: "What is the largest mammal in the world?", options: ["Elephant", "Blue Whale", "Great White Shark", "Giraffe"], answer: "Blue Whale" },
+            { question: "Who wrote 'Romeo and Juliet'?", options: ["Charles Dickens", "William Shakespeare", "Mark Twain", "Jane Austen"], answer: "William Shakespeare" },
+            { question: "What is the chemical symbol for water?", options: ["O2", "H2O", "CO2", "NaCl"], answer: "H2O" }
         ];
 
         // --- Render Quiz ---
-        const questionsWrapper = document.getElementById('questions-wrapper');
-        
         function loadQuiz() {
+            const questionsWrapper = document.getElementById('questions-wrapper');
             let questionHTML = '';
             quizData.forEach((q, index) => {
                 questionHTML += `
@@ -202,21 +210,25 @@
             questionsWrapper.innerHTML = questionHTML;
         }
 
-        // --- Handle Form Submission ---
-        const quizForm = document.getElementById('quiz-form');
-        quizForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        // --- Submission Logic ---
+        async function submitQuiz() {
+            // Prevent multiple submissions
+            if (quizSubmitted) return;
+            quizSubmitted = true;
 
-            // 1. Get Student Info
+            // Stop the timer and clear it from storage
+            clearInterval(timerInterval);
+            localStorage.removeItem('quizEndTime');
+
             const studentName = document.getElementById('studentName').value.trim();
             const rollNumber = document.getElementById('rollNumber').value.trim();
 
             if (!studentName || !rollNumber) {
                 showMessage("Please fill in your name and roll number before submitting.");
+                quizSubmitted = false; // Allow resubmission after fixing
                 return;
             }
 
-            // 2. Calculate Score
             let score = 0;
             quizData.forEach((q, index) => {
                 const selectedOption = document.querySelector(`input[name="question${index}"]:checked`);
@@ -227,10 +239,8 @@
             const totalMarks = quizData.length;
             const percentage = (score / totalMarks) * 100;
 
-            // 3. Save to Firestore
             try {
-                // The collection path is "quizResults". You will see this in your Firestore database.
-                const docRef = await addDoc(collection(db, "quizResults"), {
+                await addDoc(collection(db, "quizResults"), {
                     name: studentName,
                     rollNumber: rollNumber,
                     marks: score,
@@ -238,33 +248,37 @@
                     percentage: percentage,
                     submittedAt: new Date()
                 });
-                console.log("Document written with ID: ", docRef.id);
                 
-                // 4. Display Result
                 document.getElementById('score').innerText = `${score} / ${totalMarks} (${percentage.toFixed(2)}%)`;
                 
                 let feedbackText = "Good effort! Keep practicing.";
-                if (percentage >= 80) {
-                    feedbackText = "Excellent work! You have a great score.";
-                } else if (percentage >= 60) {
-                    feedbackText = "Well done! A solid performance.";
-                }
+                if (percentage >= 80) feedbackText = "Excellent work! You have a great score.";
+                else if (percentage >= 60) feedbackText = "Well done! A solid performance.";
                 document.getElementById('feedback').innerText = feedbackText;
 
                 document.getElementById('result').classList.remove('hidden');
-                quizForm.classList.add('hidden');
+                document.getElementById('quiz-form').classList.add('hidden');
                 document.getElementById('student-details').classList.add('hidden');
+                document.getElementById('timer-display').classList.add('hidden');
+
 
             } catch (error) {
                 console.error("Error adding document: ", error);
                 showMessage("There was an error saving your score. Please check the console for details.");
+                quizSubmitted = false; // Allow resubmission if saving failed
             }
+        }
+
+        document.getElementById('quiz-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            submitQuiz();
         });
 
         // --- Initial Load ---
         window.onload = () => {
             authenticateUser();
             loadQuiz();
+            startOrResumeTimer();
         };
     </script>
 </body>
