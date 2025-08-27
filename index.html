@@ -21,12 +21,6 @@
         .modal-container {
             transition: transform 0.3s ease;
         }
-        /* Style for the content blur effect */
-        .content-blurred {
-            filter: blur(8px);
-            pointer-events: none;
-            user-select: none;
-        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
@@ -38,6 +32,12 @@
              <div id="timer-display" class="text-2xl font-bold text-red-500 bg-red-100 px-4 py-2 rounded-lg">10:00</div>
         </div>
         <p class="text-center text-gray-500 mb-6">Test your knowledge and submit your score!</p>
+
+        <!-- Security Warning -->
+        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6 rounded-r-lg" role="alert">
+            <p class="font-bold">Important Notice</p>
+            <p>This quiz must be completed in a single session. Switching tabs or clicking outside the quiz window will result in an automatic submission.</p>
+        </div>
 
         <!-- Student Details Form -->
         <div id="student-details" class="mb-8 border-b pb-6">
@@ -82,12 +82,6 @@
         </div>
     </div>
     
-    <!-- Anti-Screenshot Overlay -->
-    <div id="focus-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center text-white text-2xl font-bold hidden z-50">
-        <p>Please return to the quiz window.</p>
-    </div>
-
-
     <!-- Firebase SDK -->
     <script type="module">
         // IMPORTANT: Import Firebase modules
@@ -115,7 +109,7 @@
         
         // --- App State & Constants ---
         let timerInterval;
-        const QUIZ_DURATION = 1 * 60 * 1000; // 10 minutes
+        const QUIZ_DURATION = 2 * 60 * 1000; // 10 minutes
         let quizSubmitted = false;
 
         // --- Authentication ---
@@ -123,7 +117,8 @@
             try {
                 await signInAnonymously(auth);
                 console.log("User authenticated successfully.");
-            } catch (error) {
+            } catch (error)
+                 {
                 console.error("Authentication failed:", error);
                 showMessage("Error: Could not connect to the database. Please refresh and try again.");
             }
@@ -154,20 +149,13 @@
         modalCloseBtn.addEventListener('click', hideMessage);
         modal.addEventListener('click', (e) => { if (e.target === modal) hideMessage(); });
 
-        // --- Anti-Screenshot Logic ---
-        const quizContainer = document.getElementById('quiz-container');
-        const focusOverlay = document.getElementById('focus-overlay');
-
+        // --- Stricter Anti-Cheating Logic ---
         window.addEventListener('blur', () => {
-            // When the user clicks away, blur the content and show the overlay.
-            quizContainer.classList.add('content-blurred');
-            focusOverlay.classList.remove('hidden');
-        });
-
-        window.addEventListener('focus', () => {
-            // When the user clicks back, unblur the content and hide the overlay.
-            quizContainer.classList.remove('content-blurred');
-            focusOverlay.classList.add('hidden');
+            // When the user clicks away or switches tabs, submit the quiz automatically.
+            if (!quizSubmitted) {
+                showMessage("You have left the quiz window. The quiz has been submitted automatically.");
+                submitQuiz();
+            }
         });
 
         // --- Timer Logic ---
@@ -186,8 +174,10 @@
                 if (remainingTime <= 0) {
                     clearInterval(timerInterval);
                     timerDisplay.textContent = "Time's Up!";
-                    showMessage("Time is up! Your quiz will be submitted automatically.");
-                    submitQuiz();
+                    if (!quizSubmitted) {
+                        showMessage("Time is up! Your quiz will be submitted automatically.");
+                        submitQuiz();
+                    }
                     return;
                 }
 
@@ -243,11 +233,9 @@
             const studentName = document.getElementById('studentName').value.trim();
             const rollNumber = document.getElementById('rollNumber').value.trim();
 
-            if (!studentName || !rollNumber) {
-                showMessage("Please fill in your name and roll number before submitting.");
-                quizSubmitted = false;
-                return;
-            }
+            // Use placeholder values if student info is missing during auto-submit
+            const finalStudentName = studentName || "Auto-Submitted";
+            const finalRollNumber = rollNumber || "N/A";
 
             let score = 0;
             quizData.forEach((q, index) => {
@@ -261,8 +249,8 @@
 
             try {
                 await addDoc(collection(db, "quizResults"), {
-                    name: studentName,
-                    rollNumber: rollNumber,
+                    name: finalStudentName,
+                    rollNumber: finalRollNumber,
                     marks: score,
                     totalMarks: totalMarks,
                     percentage: percentage,
