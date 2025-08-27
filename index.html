@@ -21,6 +21,12 @@
         .modal-container {
             transition: transform 0.3s ease;
         }
+        /* Style for the content blur effect */
+        .content-blurred {
+            filter: blur(8px);
+            pointer-events: none;
+            user-select: none;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
@@ -75,6 +81,11 @@
             </button>
         </div>
     </div>
+    
+    <!-- Anti-Screenshot Overlay -->
+    <div id="focus-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center text-white text-2xl font-bold hidden z-50">
+        <p>Please return to the quiz window.</p>
+    </div>
 
 
     <!-- Firebase SDK -->
@@ -86,17 +97,15 @@
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
 
         // --- Firebase Configuration ---
-        // This is your specific Firebase project configuration.
         const firebaseConfig = {
             apiKey: "AIzaSyCBoAa0IqIAAJHvP9RJkuIAZkpKrrR1kWM",
             authDomain: "data-7a9f7.firebaseapp.com",
             projectId: "data-7a9f7",
-            storageBucket: "data-7a9f7.appspot.com", // Corrected storage bucket domain
+            storageBucket: "data-7a9f7.appspot.com",
             messagingSenderId: "68605053268",
             appId: "1:68605053268:web:5c2572b71b109de9c420c1",
             measurementId: "G-ERKN0FNZ3C"
         };
-
 
         // --- App & Firestore Initialization ---
         const app = initializeApp(firebaseConfig);
@@ -106,7 +115,7 @@
         
         // --- App State & Constants ---
         let timerInterval;
-        const QUIZ_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
+        const QUIZ_DURATION = 1 * 60 * 1000; // 10 minutes
         let quizSubmitted = false;
 
         // --- Authentication ---
@@ -145,13 +154,28 @@
         modalCloseBtn.addEventListener('click', hideMessage);
         modal.addEventListener('click', (e) => { if (e.target === modal) hideMessage(); });
 
+        // --- Anti-Screenshot Logic ---
+        const quizContainer = document.getElementById('quiz-container');
+        const focusOverlay = document.getElementById('focus-overlay');
+
+        window.addEventListener('blur', () => {
+            // When the user clicks away, blur the content and show the overlay.
+            quizContainer.classList.add('content-blurred');
+            focusOverlay.classList.remove('hidden');
+        });
+
+        window.addEventListener('focus', () => {
+            // When the user clicks back, unblur the content and hide the overlay.
+            quizContainer.classList.remove('content-blurred');
+            focusOverlay.classList.add('hidden');
+        });
+
         // --- Timer Logic ---
         function startOrResumeTimer() {
             const timerDisplay = document.getElementById('timer-display');
             let endTime = localStorage.getItem('quizEndTime');
 
             if (!endTime) {
-                // If no end time is stored, start a new timer.
                 endTime = Date.now() + QUIZ_DURATION;
                 localStorage.setItem('quizEndTime', endTime);
             }
@@ -163,18 +187,16 @@
                     clearInterval(timerInterval);
                     timerDisplay.textContent = "Time's Up!";
                     showMessage("Time is up! Your quiz will be submitted automatically.");
-                    submitQuiz(); // Auto-submit the quiz
+                    submitQuiz();
                     return;
                 }
 
                 const minutes = Math.floor((remainingTime % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((remainingTime % (1000 * 60)) / 1000);
                 
-                // Format time to always show two digits for seconds
                 timerDisplay.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
             }, 1000);
         }
-
 
         // --- Quiz Data ---
         const quizData = [
@@ -212,11 +234,9 @@
 
         // --- Submission Logic ---
         async function submitQuiz() {
-            // Prevent multiple submissions
             if (quizSubmitted) return;
             quizSubmitted = true;
 
-            // Stop the timer and clear it from storage
             clearInterval(timerInterval);
             localStorage.removeItem('quizEndTime');
 
@@ -225,7 +245,7 @@
 
             if (!studentName || !rollNumber) {
                 showMessage("Please fill in your name and roll number before submitting.");
-                quizSubmitted = false; // Allow resubmission after fixing
+                quizSubmitted = false;
                 return;
             }
 
@@ -261,11 +281,10 @@
                 document.getElementById('student-details').classList.add('hidden');
                 document.getElementById('timer-display').classList.add('hidden');
 
-
             } catch (error) {
                 console.error("Error adding document: ", error);
                 showMessage("There was an error saving your score. Please check the console for details.");
-                quizSubmitted = false; // Allow resubmission if saving failed
+                quizSubmitted = false;
             }
         }
 
